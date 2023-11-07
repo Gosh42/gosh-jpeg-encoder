@@ -6,7 +6,7 @@ namespace jpeg
     {
         static void Main(string[] args)
         {
-            string path = @"C:\convert2jpeg.png";
+            string path = @"D:\convert2jpg.png";
             Bitmap image = new Bitmap(path);
 
             int width  = image.Width;
@@ -20,8 +20,7 @@ namespace jpeg
             byte[,] Cr = new byte[height, width];
             ColourSpaceConversion(image, Y, Cb, Cr);
 
-            PrintMatrix(Cb);
-            CreateComparisonImage(image, Y, Cb, Cr);
+            //PrintMatrix(Cb); CreateComparisonImage(image, Y, Cb, Cr);
 
             /* ======= Chrominance Downsampling (4:2:0) ======= */
 
@@ -33,12 +32,12 @@ namespace jpeg
 
             ChrominanceDownsampling(height, width, Cb, Cr, dsCb, dsCr);
             
-            PrintMatrix(dsCb); CreateDownsampledImage(dsCb, dsCr);
+            //PrintMatrix(dsCb); CreateDownsampledImage(dsCb, dsCr);
 
 
             /* ======= Discrete Cosine Transform (DST) ======== */
 
-
+            DiscreteCosineTransform(halfHeight, halfWidth, dsCr);
 
 
 
@@ -47,6 +46,7 @@ namespace jpeg
             //run length and huffman encoding
         }
 
+        // Temporary helper functions
         static void PrintMatrix(byte[,] input)
         {
             for (int y = 0; y < input.GetLength(0); y++)
@@ -59,7 +59,19 @@ namespace jpeg
             }
             Console.WriteLine();
         }
-        // Cb AND Cr IMAGES OUTPUTTED ARE NOT ACCURATE. THEY'RE JUST FOR AN EXAMPLE UNTIL I FIGURE OUT HOW TO SHOW THEM CORRECTLY
+        static void PrintMatrix(sbyte[,] input)
+        {
+            for (int y = 0; y < input.GetLength(0); y++)
+            {
+                for (int x = 0; x < input.GetLength(1); x++)
+                {
+
+                    Console.Write(input[y, x] + " ");
+                }
+                Console.WriteLine();
+            }
+            Console.WriteLine();
+        }
         static void CreateComparisonImage(Bitmap image, byte[,] Y, byte[,] Cb, byte[,] Cr)
         {
             int height = image.Height;
@@ -85,11 +97,19 @@ namespace jpeg
             //Cb
             for (int y = height; y < height * 2; y++)
                 for (int x = width; x < width * 2; x++)
-                    newImage.SetPixel(x, y, Color.FromArgb(0, 0, Cb[y - height, x - width]));
+                    newImage.SetPixel(x, y, Color.FromArgb(
+                        (byte)128, 
+                        (byte)(128 - 0.344136 * (Cb[y - height, x - width] - 128)),
+                        (byte)(128 + 1.772 * (Cb[y - height, x - width] - 128))
+                        ));
             //Cr
             for (int y = height; y < height * 2; y++)
                 for (int x = width * 2; x < width * 3; x++)
-                    newImage.SetPixel(x, y, Color.FromArgb(Cr[y - height, x - width * 2], 0, 0));
+                    newImage.SetPixel(x, y, Color.FromArgb(
+                        (byte)(128 + 1.402 * (Cr[y - height, x - width * 2] - 128)),
+                        (byte)(128 - 0.714136 * (Cr[y - height, x - width * 2] - 128)), 
+                        (byte)(128)
+                        ));
 
             newImage.Save(@"clr.png");
         }
@@ -98,18 +118,27 @@ namespace jpeg
             int height = dsCb.GetLength(0);
             int width = dsCb.GetLength(1);
             Bitmap newImage = new Bitmap(width << 1, height);
-
+            //Cb
             for (int y = 0; y < height; y++)
                 for (int x = 0; x < width; x++)
-                    newImage.SetPixel(x, y, Color.FromArgb(0, 0, dsCb[y, x]));
-
+                    newImage.SetPixel(x, y, Color.FromArgb(
+                        (byte)128,
+                        (byte)(128 - 0.344136 * (dsCb[y, x] - 128)),
+                        (byte)(128 + 1.772 * (dsCb[y, x] - 128))
+                        ));
+            //Cr
             for (int y = 0; y < height; y++)
                 for (int x = width; x < width * 2; x++)
-                    newImage.SetPixel(x, y, Color.FromArgb(dsCr[y, x - width], 0, 0));
+                    newImage.SetPixel(x, y, Color.FromArgb(
+                        (byte)(128 + 1.402 * (dsCr[y, x - width] - 128)),
+                        (byte)(128 - 0.714136 * (dsCr[y, x - width] - 128)),
+                        (byte)(128)
+                        ));
 
             newImage.Save(@"downsampled.png");
         }
 
+        // Actual steps
         static void ColourSpaceConversion(Bitmap image, byte[,] Y, byte[,] Cb, byte[,] Cr)
         {
             for (int y = 0; y < image.Height; y++)
@@ -152,11 +181,50 @@ namespace jpeg
                     dsCb[y >> 1, halfWidthIndex] = (byte)((Cb[y - 1, width - 1] + Cb[y, width - 1]) >> 1);
                     dsCr[y >> 1, halfWidthIndex] = (byte)((Cr[y - 1, width - 1] + Cr[y, width - 1]) >> 1);
                 }
-            if ((height & 1) + (width & 1) == 2) //высоту и ширину
+            if ((height & 1) == 1 && (width & 1) == 1) //высоту и ширину
             {
                 dsCb[halfHeightIndex, halfWidthIndex] = Cb[height - 1, width - 1];
                 dsCr[halfHeightIndex, halfWidthIndex] = Cr[height - 1, width - 1];
             }
+        }
+        static void DiscreteCosineTransform(int height, int width, byte[,] imageComponent)
+        {
+            int width8 = width + 8 - (width % 8);
+            int height8 = height + 8 - (height % 8);
+            sbyte[,] shiftedValues = new sbyte[height8, width8];
+
+            Console.WriteLine(width + "x" + height);
+            Console.WriteLine(width8 + "x" + height8);
+
+            for (int y = 0; y < height; y++)
+                for (int x = 0; x < width; x++)
+                {
+                    shiftedValues[y, x] = (sbyte)(imageComponent[y, x] - 128);
+                }
+
+            if(height8 > height)
+                for(int y = height; y < height8; y++)
+                    for(int x = 0; x < width; x++)
+                    {
+                        shiftedValues[y, x] = shiftedValues[height - 1, x];
+                    }
+
+            if (width8 > width)
+                for (int y = 0; y < height; y++)
+                    for (int x = width; x < width8; x++)
+                    {
+                        shiftedValues[y, x] = shiftedValues[y, width - 1];
+                    }
+
+            if (height8 > height && width8 > width)
+                for (int y = height; y < height8; y++)
+                    for (int x = width; x < width8; x++)
+                    {
+                        shiftedValues[y, x] = shiftedValues[height - 1, width - 1];
+                    }
+
+
+            PrintMatrix(shiftedValues);
         }
     }
 }
