@@ -36,12 +36,14 @@ namespace jpeg
 
 
             /* ======= Discrete Cosine Transform (DST) ======== */
+            /* =============== and Quantisation =============== */
 
-            DiscreteCosineTransform(halfHeight, halfWidth, dsCr);
+            byte quality = 50;
+            short[,] quantisationMatrix = GenerateQuantisationMatrix(quality);
 
-
-
-            //quantization
+            short[,] quantisedY = Quantise(DiscreteCosineTransform(height, width, Y), quantisationMatrix);
+            short[,] quantisedCb = Quantise(DiscreteCosineTransform(halfHeight, halfWidth, dsCb), quantisationMatrix);
+            short[,] quantisedCr = Quantise(DiscreteCosineTransform(halfHeight, halfWidth, dsCr), quantisationMatrix);
 
             //run length and huffman encoding
         }
@@ -59,14 +61,13 @@ namespace jpeg
             }
             Console.WriteLine();
         }
-        static void PrintMatrix(sbyte[,] input)
+        static void PrintMatrix(short[,] input)
         {
             for (int y = 0; y < input.GetLength(0); y++)
             {
                 for (int x = 0; x < input.GetLength(1); x++)
                 {
-
-                    Console.Write(input[y, x] + " ");
+                    Console.Write(input[y, x] + "\t");
                 }
                 Console.WriteLine();
             }
@@ -187,44 +188,119 @@ namespace jpeg
                 dsCr[halfHeightIndex, halfWidthIndex] = Cr[height - 1, width - 1];
             }
         }
-        static void DiscreteCosineTransform(int height, int width, byte[,] imageComponent)
+        static short[,] DiscreteCosineTransform(int height, int width, byte[,] imageComponent)
         {
-            int width8 = width + 8 - (width % 8);
-            int height8 = height + 8 - (height % 8);
+            int width8 = width;
+            int height8 = height; 
+
+            if (width8 % 8 != 0) width8 += 8 - (width % 8);
+            if (height8 % 8 != 0) height8 += 8 - (height % 8);
+
             sbyte[,] shiftedValues = new sbyte[height8, width8];
 
-            Console.WriteLine(width + "x" + height);
-            Console.WriteLine(width8 + "x" + height8);
+            {
+                for (int y = 0; y < height; y++)
+                    for (int x = 0; x < width; x++)
+                    {
+                        shiftedValues[y, x] = (sbyte)(imageComponent[y, x] - 128);
+                    }
 
-            for (int y = 0; y < height; y++)
-                for (int x = 0; x < width; x++)
+                if (height8 > height)
+                    for (int y = height; y < height8; y++)
+                        for (int x = 0; x < width; x++)
+                        {
+                            shiftedValues[y, x] = shiftedValues[height - 1, x];
+                        }
+
+                if (width8 > width)
+                    for (int y = 0; y < height; y++)
+                        for (int x = width; x < width8; x++)
+                        {
+                            shiftedValues[y, x] = shiftedValues[y, width - 1];
+                        }
+
+                if (height8 > height && width8 > width)
+                    for (int y = height; y < height8; y++)
+                        for (int x = width; x < width8; x++)
+                        {
+                            shiftedValues[y, x] = shiftedValues[height - 1, width - 1];
+                        }
+            }
+
+            double au, av;
+            double oneDivBySqrt2 = 1 / Math.Sqrt(2);
+            short[,] dct = new short[height8, width8];
+
+            for(int v = 0; v < 8; v++)
+            {
+                if (v == 0)
+                    av = oneDivBySqrt2;
+                else
+                    av = 1;
+
+                for (int u = 0; u < 8; u++)
                 {
-                    shiftedValues[y, x] = (sbyte)(imageComponent[y, x] - 128);
+                    if (u == 0)
+                        au = oneDivBySqrt2;
+                    else
+                        au = 1;
+
+                    double temp = 0;
+                    
+                    for (int x = 0; x < 8; x++)
+                    {
+                        for(int y = 0; y < 8; y++)
+                        {
+                            temp += shiftedValues[y, x] * Math.Cos((2*x+1)*u*Math.PI/16)
+                                * Math.Cos((2*y+1)*v*Math.PI/16);
+                        }
+                    }
+                    temp *= au * av / 4;
+                    dct[v, u] = (short)Math.Round(temp);
+                }   
+            }
+            return dct;
+        }
+        static short[,] GenerateQuantisationMatrix(byte quality)
+        {
+            short[,] matrix =
+            {
+                {16,    11,    10,    16,    24,    40,    51,    61},
+                {12,    12,    14,    19,    26,    58,    60,    55},
+                {14,    13,    16,    24,    40,    57,    69,    56},
+                {14,    17,    22,    29,    51,    87,    80,    62},
+                {18,    22,    37,    56,    68,   109,   103,    77},
+                {24,    35,    55,    64,    81,   104,   113,    92},
+                {49,    64,    78,    87,   103,   121,   120,   101},
+                {72,    92,    95,    98,   112,   100,   103,    99}
+            };
+
+            if (quality == 50)
+                return matrix;
+
+            int S;
+            if (quality < 50)
+                S = 5000 / quality;
+            else
+                S = 200 - 2 * quality;
+
+            for (int i = 0; i < 8; i++)
+                for (int j = 0; j < 8; j++)
+                {
+                    matrix[i, j] = (short)((S * matrix[i, j] + 50) / 100);
+                    if (matrix[i, j] == 0)
+                        matrix[i, j] = 1;
                 }
 
-            if(height8 > height)
-                for(int y = height; y < height8; y++)
-                    for(int x = 0; x < width; x++)
-                    {
-                        shiftedValues[y, x] = shiftedValues[height - 1, x];
-                    }
+            return matrix;
+        }
+        static short[,] Quantise(short[,] dct, short[,] quantisationMatrix)
+        {
+            for (int i = 0; i < dct.GetLength(0); i++)
+                for (int j = 0; j < dct.GetLength(1); j++)
+                    dct[i, j] /= quantisationMatrix[i % 8, j % 8];
 
-            if (width8 > width)
-                for (int y = 0; y < height; y++)
-                    for (int x = width; x < width8; x++)
-                    {
-                        shiftedValues[y, x] = shiftedValues[y, width - 1];
-                    }
-
-            if (height8 > height && width8 > width)
-                for (int y = height; y < height8; y++)
-                    for (int x = width; x < width8; x++)
-                    {
-                        shiftedValues[y, x] = shiftedValues[height - 1, width - 1];
-                    }
-
-
-            PrintMatrix(shiftedValues);
+            return dct;
         }
     }
 }
