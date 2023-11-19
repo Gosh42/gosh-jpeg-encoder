@@ -31,7 +31,7 @@ namespace jpeg
             byte[,] dsCr = new byte[halfHeight, halfWidth];
 
             ChrominanceDownsampling(height, width, Cb, Cr, dsCb, dsCr);
-            
+
             //PrintMatrix(dsCb); CreateDownsampledImage(dsCb, dsCr);
 
 
@@ -42,8 +42,12 @@ namespace jpeg
             short[,] quantisationMatrix = GenerateQuantisationMatrix(quality);
 
             short[,] quantisedY = Quantise(DiscreteCosineTransform(height, width, Y), quantisationMatrix);
-            short[,] quantisedCb = Quantise(DiscreteCosineTransform(halfHeight, halfWidth, dsCb), quantisationMatrix);
+            short[,] quantisedCb = DiscreteCosineTransform(halfHeight, halfWidth, dsCb);
+            PrintMatrix(quantisedCb);
+            Quantise(quantisedCb, quantisationMatrix);
             short[,] quantisedCr = Quantise(DiscreteCosineTransform(halfHeight, halfWidth, dsCr), quantisationMatrix);
+
+            PrintMatrix(quantisedCb);
 
             //run length and huffman encoding
         }
@@ -61,13 +65,25 @@ namespace jpeg
             }
             Console.WriteLine();
         }
+        static void PrintMatrix(sbyte[,] input)
+        {
+            for (int y = 0; y < input.GetLength(0); y++)
+            {
+                for (int x = 0; x < input.GetLength(1); x++)
+                {
+                    Console.Write(input[y, x] + "  ");
+                }
+                Console.WriteLine();
+            }
+            Console.WriteLine();
+        }
         static void PrintMatrix(short[,] input)
         {
             for (int y = 0; y < input.GetLength(0); y++)
             {
                 for (int x = 0; x < input.GetLength(1); x++)
                 {
-                    Console.Write(input[y, x] + "\t");
+                    Console.Write(input[y, x] + "  ");
                 }
                 Console.WriteLine();
             }
@@ -231,34 +247,37 @@ namespace jpeg
             double oneDivBySqrt2 = 1 / Math.Sqrt(2);
             short[,] dct = new short[height8, width8];
 
-            for(int v = 0; v < 8; v++)
-            {
-                if (v == 0)
-                    av = oneDivBySqrt2;
-                else
-                    av = 1;
-
-                for (int u = 0; u < 8; u++)
-                {
-                    if (u == 0)
-                        au = oneDivBySqrt2;
-                    else
-                        au = 1;
-
-                    double temp = 0;
-                    
-                    for (int x = 0; x < 8; x++)
+            for (int yOffset = 0; yOffset < height8; yOffset += 8)
+                for (int xOffset = 0; xOffset < width8; xOffset += 8)
+                    for(int v = 0; v < 8; v++)
                     {
-                        for(int y = 0; y < 8; y++)
+                        if (v == 0)
+                            av = oneDivBySqrt2;
+                        else
+                            av = 1;
+
+                        for (int u = 0; u < 8; u++)
                         {
-                            temp += shiftedValues[y, x] * Math.Cos((2*x+1)*u*Math.PI/16)
-                                * Math.Cos((2*y+1)*v*Math.PI/16);
+                            if (u == 0)
+                                au = oneDivBySqrt2;
+                            else
+                                au = 1;
+
+                            double temp = 0;
+                    
+                            for (int x = 0; x < 8; x++)
+                            {
+                                for(int y = 0; y < 8; y++)
+                                {   //TODO: перенести вычисления этих косинусов в отдельный цикл чтобы оно кучу раз заново не вычислялось
+                                    temp += shiftedValues[y + yOffset, x + xOffset] * Math.Cos((2*x+1)*u*Math.PI/16)
+                                        * Math.Cos((2*y+1)*v*Math.PI/16);
+                                }
+                            }
+                            temp *= au * av / 4;
+                            dct[v + yOffset, u + xOffset] = (short)Math.Round(temp);
                         }
                     }
-                    temp *= au * av / 4;
-                    dct[v, u] = (short)Math.Round(temp);
-                }   
-            }
+
             return dct;
         }
         static short[,] GenerateQuantisationMatrix(byte quality)
@@ -284,21 +303,21 @@ namespace jpeg
             else
                 S = 200 - 2 * quality;
 
-            for (int i = 0; i < 8; i++)
-                for (int j = 0; j < 8; j++)
+            for (int y = 0; y < 8; y++)
+                for (int x = 0; x < 8; x++)
                 {
-                    matrix[i, j] = (short)((S * matrix[i, j] + 50) / 100);
-                    if (matrix[i, j] == 0)
-                        matrix[i, j] = 1;
+                    matrix[y, x] = (short)((S * matrix[y, x] + 50) / 100);
+                    if (matrix[y, x] == 0)
+                        matrix[y, x] = 1;
                 }
 
             return matrix;
         }
         static short[,] Quantise(short[,] dct, short[,] quantisationMatrix)
         {
-            for (int i = 0; i < dct.GetLength(0); i++)
-                for (int j = 0; j < dct.GetLength(1); j++)
-                    dct[i, j] /= quantisationMatrix[i % 8, j % 8];
+            for (int y = 0; y < dct.GetLength(0); y++)
+                for (int x = 0; x < dct.GetLength(1); x++)
+                    dct[y, x] /= quantisationMatrix[y % 8, x % 8];
 
             return dct;
         }
