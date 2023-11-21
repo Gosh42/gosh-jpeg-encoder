@@ -20,7 +20,8 @@ namespace jpeg
             byte[,] Cr = new byte[height, width];
             ColourSpaceConversion(image, Y, Cb, Cr);
 
-            //PrintMatrix(Cb); CreateComparisonImage(image, Y, Cb, Cr);
+            //PrintMatrix(Cb);
+            CreateComparisonImage(image, Y, Cb, Cr);
 
             /* ======= Chrominance Downsampling (4:2:0) ======= */
 
@@ -32,22 +33,43 @@ namespace jpeg
 
             ChrominanceDownsampling(height, width, Cb, Cr, dsCb, dsCr);
 
-            //PrintMatrix(dsCb); CreateDownsampledImage(dsCb, dsCr);
+            //PrintMatrix(dsCb);
+            CreateDownsampledImage(dsCb, dsCr);
 
 
             /* ======= Discrete Cosine Transform (DST) ======== */
             /* =============== and Quantisation =============== */
 
             byte quality = 50;
-            short[,] quantisationMatrix = GenerateQuantisationMatrix(quality);
+            short[,] luminanceQuantisationMatrix = GenerateQuantisationMatrix(quality, false);
+            short[,] chrominanceQuantisationMatrix = GenerateQuantisationMatrix(quality, true);
 
-            short[,] quantisedY = Quantise(DiscreteCosineTransform(height, width, Y), quantisationMatrix);
+            short[,] quantisedY = DiscreteCosineTransform(height, width, Y);
             short[,] quantisedCb = DiscreteCosineTransform(halfHeight, halfWidth, dsCb);
-            PrintMatrix(quantisedCb);
-            Quantise(quantisedCb, quantisationMatrix);
-            short[,] quantisedCr = Quantise(DiscreteCosineTransform(halfHeight, halfWidth, dsCr), quantisationMatrix);
+            short[,] quantisedCr = DiscreteCosineTransform(halfHeight, halfWidth, dsCr);
+
+            //PrintMatrix(quantisedCb);
+
+            Quantise(quantisedY, luminanceQuantisationMatrix);
+            Quantise(quantisedCb, chrominanceQuantisationMatrix);
+            Quantise(quantisedCr, chrominanceQuantisationMatrix);
 
             PrintMatrix(quantisedCb);
+
+            short[,] test =
+            {
+                { 0,  1,  5,  6, 14, 15, 27, 28},
+                { 2,  4,  7, 13, 16, 26, 29, 42},
+                { 3,  8, 12, 17, 25, 30, 41, 43},
+                { 9, 11, 18, 24, 31, 40, 44, 53},
+                {10, 19, 23, 32, 39, 45, 52, 54},
+                {20, 22, 33, 38, 46, 51, 55, 60},
+                {21, 34, 37, 47, 50, 56, 59, 61},
+                {35, 36, 48, 49, 57, 58, 62, 63}
+            };
+
+            //PrintMatrix(test);
+            Zigzag(quantisedCb);
 
             //run length and huffman encoding
         }
@@ -280,9 +302,9 @@ namespace jpeg
 
             return dct;
         }
-        static short[,] GenerateQuantisationMatrix(byte quality)
+        static short[,] GenerateQuantisationMatrix(byte quality, bool isForChrominance)
         {
-            short[,] matrix =
+            short[,] luminanceMatrix =
             {
                 {16,    11,    10,    16,    24,    40,    51,    61},
                 {12,    12,    14,    19,    26,    58,    60,    55},
@@ -293,6 +315,23 @@ namespace jpeg
                 {49,    64,    78,    87,   103,   121,   120,   101},
                 {72,    92,    95,    98,   112,   100,   103,    99}
             };
+            short[,] chrominanceMatrix =
+            {
+                {17,    18,    24,    47,    99,    99,    99,     99},
+                {18,    21,    26,    66,    99,    99,    99,     99},
+                {24,    26,    56,    99,    99,    99,    99,     99},
+                {47,    66,    99,    99,    99,    99,    99,     99},
+                {99,    99,    99,    99,    99,    99,    99,     99},
+                {99,    99,    99,    99,    99,    99,    99,     99},
+                {99,    99,    99,    99,    99,    99,    99,     99},
+                {99,    99,    99,    99,    99,    99,    99,     99}
+            };
+
+            short[,] matrix;
+            if (isForChrominance)
+                matrix = chrominanceMatrix;
+            else
+                matrix = luminanceMatrix;
 
             if (quality == 50)
                 return matrix;
@@ -313,13 +352,76 @@ namespace jpeg
 
             return matrix;
         }
-        static short[,] Quantise(short[,] dct, short[,] quantisationMatrix)
+        static void Quantise(short[,] dct, short[,] quantisationMatrix)
         {
             for (int y = 0; y < dct.GetLength(0); y++)
                 for (int x = 0; x < dct.GetLength(1); x++)
                     dct[y, x] /= quantisationMatrix[y % 8, x % 8];
+        }
+        static void Zigzag(short[,] input)
+        {
+            int height = input.GetLength(0);
+            int width = input.GetLength(1);
 
-            return dct;
+            short[] numbers = new short[height * width];
+            int i = 0;
+            for (int yOffset = 0; yOffset < height; yOffset += 8)
+                for (int xOffset = 0; xOffset < width; xOffset += 8)
+                {
+                    int x = xOffset, y = yOffset;
+                    // Обход до левого нижнего угла
+                    while (true)
+                    {
+                        // Вправо один раз (x++)
+                        numbers[i++] = input[y, x++];
+
+                        do // Влево вниз (y++ x--)
+                        {
+                            numbers[i++] = input[y++, x--];
+                        } while (x > xOffset);
+
+                        if (y == yOffset + 7) // Выход при достижении нижнего края
+                            break;
+
+                        // Вниз один раз (y++)
+                        numbers[i++] = input[y++, x];
+
+                        do // Вправо вверх (y-- x++)
+                        {
+                            numbers[i++] = input[y--, x++];
+                        } while (y > yOffset);
+                    }
+
+                    // Обход до правого нижнего угла
+                    while (true)
+                    {
+                        // Вправо один раз (x++)
+                        numbers[i++] = input[y, x++];
+
+                        // Выход при достижении правого нижнего угла
+                        if (x == xOffset + 7)
+                            break;
+
+                        // Вправо вверх (y-- x++)
+                        do
+                        {
+                            numbers[i++] = input[y--, x++];
+                        } while (x < xOffset + 7);
+
+
+                        // Вниз один раз (y++)
+                        numbers[i++] = input[y++, x];
+
+                        // Влево вниз (y++ x--)
+                        do
+                        {
+                            numbers[i++] = input[y++, x--];
+                        } while (y < yOffset + 7);
+                    }
+                    numbers[i++] = input[y, x];
+                }
+
+            Console.WriteLine(String.Join(", ", numbers));
         }
     }
 }
