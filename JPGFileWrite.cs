@@ -61,9 +61,9 @@ namespace jpeg
         /* ============ Define Huffman Tables ============= */
         static readonly byte[] DHT = { 0xFF, 0xC4 };
         static byte[] DHTLength = new byte[2];
-        static readonly byte DHTInfoDC_Y = 0x00; // DC, ID: 0
-        static byte[] DHTCodeAmountDC_Y = new byte[16];
-        static List<byte> DHTCodesDC_Y = new List<byte>();
+        static readonly byte DHTInfo_LuminanceDC = 0x00; // DC, ID: 0
+        //static byte[] DHTCodeAmountDC_Y = new byte[16];
+        //static List<byte> DHTCodesDC_Y = new List<byte>();
 
         // тут короче резня, потом допишу
 
@@ -84,120 +84,161 @@ namespace jpeg
         /* =============== The Thing :TM: ================= */
         public static void WriteToFile(
             byte[,] qTableY, byte[,] qTableC,
-            short height, short width,
-            byte[] byteCountsDC_Y, List<byte> tableValuesDC_Y, List<string> asd
+            short imageHeight, short imageWidth,
+            byte[] byteCounts_LuminanceDC, List<byte> tableValues_LuminanceDC, List<string> HuffmanCodes_LuminanceDC
             )
         {
-            List<byte> byteList = new List<byte>();
+            List<byte> data = new List<byte>();
 
             // Заголовок
-            {
-                byteList.AddRange(SOI);
-                byteList.AddRange(APP0);
-                byteList.AddRange(headerLength);
-                byteList.AddRange(JFIFIdentifier);
-                byteList.AddRange(JFIFVersion);
-                byteList.Add(densityType);
-                byteList.AddRange(xDensity);
-                byteList.AddRange(yDensity);
-                byteList.Add(xThumbnail);
-                byteList.Add(yThumbnail);
-            }
+            AddHeaderData(data);
+
             // Таблицы квантования
-            {
-                for (int y = 0; y < 8; y++)
-                    for (int x = 0; x < 8; x++)
-                    {
-                        quantisationTableY[y * 8 + x] = qTableY[y, x];
-                        quantisationTableС[y * 8 + x] = qTableC[y, x];
-                    }
-                byteList.AddRange(DQT);
-                byteList.AddRange(DQTLength);
-                byteList.Add(quantisationTableInfoY);
-                byteList.AddRange(quantisationTableY);
-                //byteList.Add(quantisationTableInfoС);
-                //byteList.AddRange(quantisationTableС);
-            }
+            AddQuantisationTableData(data, qTableY, qTableC);
 
             // Define Huffman Tables
-            {
-                List<string> strList = new List<string>();
-                foreach (string s in asd)
-                {
-                    strList.Add("0000" + Convert.ToString(s.Length & 0x0F, 2).PadLeft(4, '0') + s);
-                }
-
-                string str = string.Join("", strList);
-                str.PadRight(str.Length + (8 - str.Length % 8), '1');
-
-                Console.WriteLine(str.Length);
-
-                for (int i = 0; i < str.Length / 8; i++)
-                {
-                    DHTCodesDC_Y.Add(Convert.ToByte(str.Substring(8 * i, 8), 2));
-                }
-
-                short DHTLengthCalculation = (short)(DHT.Length + 1 + byteCountsDC_Y.Length + tableValuesDC_Y.Count);
-                DHTCodeAmountDC_Y = byteCountsDC_Y;
-
-                DHTLength[0] = (byte)((DHTLengthCalculation >> 8) & 0xff);
-                DHTLength[1] = (byte)(DHTLengthCalculation & 0xff);
-
-                Console.WriteLine(" _____ " + String.Join(", ", tableValuesDC_Y));
-                Console.WriteLine(byteCountsDC_Y.Length);
-
-                byteList.AddRange(DHT);
-                byteList.AddRange(DHTLength);
-                byteList.Add(DHTInfoDC_Y);
-                byteList.AddRange(byteCountsDC_Y);
-                byteList.AddRange(tableValuesDC_Y);
-        }
+            AddHuffmanTableDefinitionData(data, byteCounts_LuminanceDC, tableValues_LuminanceDC);
 
             // Start of Frame
-            {
-                short SOFLengthCalculation = (short)(SOFLength.Length + 1/*precision*/ + frameHeight.Length +
-                    frameWidth.Length + 1/*channelAmount*/ + 3);//9 /*channel data*/);
-                SOFLength[0] = (byte)((SOFLengthCalculation >> 8) & 0xFF);
-                SOFLength[1] = (byte)(SOFLengthCalculation & 0xFF);
+            AddStartOfFrameData(data, imageHeight, imageWidth);
 
-                frameHeight[0] = (byte)((height >> 8) & 0xFF);
-                frameHeight[1] = (byte)(height & 0xFF);
-                frameWidth[0] = (byte)((width >> 8) & 0xFF);
-                frameWidth[1] = (byte)(width & 0xFF);
-
-                byteList.AddRange(SOF);
-                byteList.AddRange(SOFLength);
-                byteList.Add(precision);
-                byteList.AddRange(frameHeight);
-                byteList.AddRange(frameWidth);
-                byteList.Add(channelAmount);
-                byteList.Add(channelID_Y);
-                byteList.Add(samplingFactorY);
-                byteList.Add(quantisationTableID_Y);
-                /*byteList.Add(channelID_Cb);
-                byteList.Add(samplingFactorCb);
-                byteList.Add(quantisationTableID_Cb);
-                byteList.Add(channelID_Cr);
-                byteList.Add(samplingFactorCr);
-                byteList.Add(quantisationTableID_Cr);*/
-            }
             // Start of Scan
-            {
-                short SOSLengthCalculation = (short)(SOSLength.Length + 5);
+            AddStartOfScanData(data);
+            AddSOSHuffmanData(data, HuffmanCodes_LuminanceDC);
 
-                byteList.AddRange(SOS);
-                byteList.AddRange(SOSLength);
-                byteList.Add(SOSchannelAmount);
-                byteList.Add(SOSChannelID_Y);
-                byteList.Add(StartOfSelection);
-                byteList.Add(EndOfSelection);
-                byteList.Add(SuccessiveApproximation);
-                byteList.AddRange(DHTCodesDC_Y);
+            // End of Image
+            data.AddRange(EOI);
 
-                byteList.AddRange(EOI);
-            }
-            File.WriteAllBytes("funny_jpeg.jpg", byteList.ToArray());
+            File.WriteAllBytes("funny_jpeg.jpg", data.ToArray());
         }
 
+
+        static void AddHeaderData(List<byte> data)
+        {
+            data.AddRange(SOI);
+            data.AddRange(APP0);
+            data.AddRange(headerLength);
+            data.AddRange(JFIFIdentifier);
+            data.AddRange(JFIFVersion);
+            data.Add(densityType);
+            data.AddRange(xDensity);
+            data.AddRange(yDensity);
+            data.Add(xThumbnail);
+            data.Add(yThumbnail);
+        }
+        static void AddQuantisationTableData(List<byte> data, byte[,] qTableLuminance, byte[,] qTableChrominance)
+        {
+            for (int y = 0; y < 8; y++)
+                for (int x = 0; x < 8; x++)
+                {
+                    quantisationTableY[y * 8 + x] = qTableLuminance[y, x];
+                    quantisationTableС[y * 8 + x] = qTableChrominance[y, x];
+                }
+
+            data.AddRange(DQT);
+            data.AddRange(DQTLength);
+            data.Add(quantisationTableInfoY);
+            data.AddRange(quantisationTableY);
+            //data.Add(quantisationTableInfoС);
+            //data.AddRange(quantisationTableС);
+        }
+        static void AddHuffmanTableDefinitionData(List<byte> data, byte[] byteCounts_LuminanceDC, List<byte> tableValuesDC_Y)
+        {
+            short DHTLengthCalculation = (short)(
+                DHT.Length + 
+                1 + /*DHTInfo_LuminanceDC*/
+                16 + /*byteCounts_LuminanceDC.Length*/
+                tableValuesDC_Y.Count
+                );
+
+            DHTLength = Short2ByteArray(DHTLengthCalculation);
+
+            data.AddRange(DHT);
+            data.AddRange(DHTLength);
+            data.Add(DHTInfo_LuminanceDC);
+            data.AddRange(byteCounts_LuminanceDC);
+            data.AddRange(tableValuesDC_Y);
+        }
+        static void AddStartOfFrameData(List<byte> data, short imageHeight, short imageWidth)
+        {
+            short SOFLengthCalculation = (short)(
+                SOFLength.Length +
+                1 + // precision
+                frameHeight.Length +
+                frameWidth.Length +
+                1 + // channelAmount
+                3 //9 // channel data
+                );
+
+            SOFLength = Short2ByteArray(SOFLengthCalculation);
+
+            frameHeight = Short2ByteArray(imageHeight);
+            frameWidth = Short2ByteArray(imageWidth);
+
+            data.AddRange(SOF);
+            data.AddRange(SOFLength);
+            data.Add(precision);
+            data.AddRange(frameHeight);
+            data.AddRange(frameWidth);
+            data.Add(channelAmount);
+            data.Add(channelID_Y);
+            data.Add(samplingFactorY);
+            data.Add(quantisationTableID_Y);
+          /*data.Add(channelID_Cb);
+            data.Add(samplingFactorCb);
+            data.Add(quantisationTableID_Cb);
+            data.Add(channelID_Cr);
+            data.Add(samplingFactorCr);
+            data.Add(quantisationTableID_Cr);*/
+        }
+        static void AddStartOfScanData(List<byte> data)
+        {
+            short SOSLengthCalculation = (short)(SOSLength.Length + 5);
+
+            SOSLength = Short2ByteArray(SOSLengthCalculation);
+
+            data.AddRange(SOS);
+            data.AddRange(SOSLength);
+            data.Add(SOSchannelAmount);
+            data.Add(SOSChannelID_Y);
+            data.Add(StartOfSelection);
+            data.Add(EndOfSelection);
+            data.Add(SuccessiveApproximation);
+            
+        }
+        static void AddSOSHuffmanData(List<byte> data, List<string> strHuffmanCodes_LuminanceDC)
+        {
+            List<byte> HuffmanCodes_LuminanceDC = HuffmanCodeStrings2ByteList_DC(strHuffmanCodes_LuminanceDC);
+
+            data.AddRange(HuffmanCodes_LuminanceDC);
+        }
+
+        static List<byte> HuffmanCodeStrings2ByteList_DC(List<string> HuffmanCodes_DC)
+        {
+            string str = "";
+            foreach (string s in HuffmanCodes_DC)
+                str += "0000" + Convert.ToString(s.Length & 0x0F, 2).PadLeft(4, '0') + s;
+
+            str.PadRight(str.Length + (8 - str.Length % 8), '1');
+
+            List<byte> codeList = new List<byte>();
+
+            for (int i = 0; i < str.Length / 8; i++)
+            {
+                codeList.Add(Convert.ToByte(str.Substring(8 * i, 8), 2));
+            }
+
+            return codeList;
+        }
+        static byte[] Short2ByteArray(short input)
+        {
+            byte[] output =
+            {
+                (byte)(input >> 8),
+                (byte)input
+            };
+
+            return output;
+        }
     }
 }

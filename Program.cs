@@ -57,9 +57,7 @@ namespace jpeg
             Quantise(quantisedCb, chrominanceQuantisationMatrix);
             Quantise(quantisedCr, chrominanceQuantisationMatrix);
 
-            //PrintMatrix(quantisedCb);
-
-            /*short[,] test =
+            /*short[,] zigzagTest =
             {
                 { 0,  1,  5,  6, 14, 15, 27, 28},
                 { 2,  4,  7, 13, 16, 26, 29, 42},
@@ -70,9 +68,6 @@ namespace jpeg
                 {21, 34, 37, 47, 50, 56, 59, 61},
                 {35, 36, 48, 49, 57, 58, 62, 63}
             };*/
-
-            //PrintMatrix(test);
-
 
             /* ==================== Zigzag ==================== */
             short[] zigzagY = Zigzag(quantisedY);
@@ -107,70 +102,35 @@ namespace jpeg
             }
 
             /* ============= Run Length Encoding ============== */
-            short[] rleTest = { 1, 2, 0, 4, 0, 0, 0, 10, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 5, 10, 0, 0, 0, 0 };
+            //short[] rleTest = { 1, 2, 0, 4, 0, 0, 0, 10, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 5, 10, 0, 0, 0, 0 };
             int[] rle = RunLengthEncoding(zigzagCb);
-            //Console.WriteLine(String.Join(", ", rle));
-            
+
+
 
             /* =============== Huffman Encoding =============== */
-            Dictionary<int, int> byteCountsDC_Y = new Dictionary<int, int>();
-            for (int i = 0; i < DC_Y.Count; i++)
-            {
-                int num = DC_Y[i];
-                //if (num == 0) continue;
-                if (byteCountsDC_Y.ContainsKey(num))
-                    byteCountsDC_Y[num]++;
-                else
-                    byteCountsDC_Y.Add(num, 1);
-            }
+            List<Node> HuffmanNodes_LuminanceDC = new List<Node>();
+            byte[] byteCounts_LuminanceDC = new byte[16];
 
-            List<Node> nodesDC_Y = GetHuffmanList(byteCountsDC_Y);
-
-            foreach (Node node in nodesDC_Y)
-                Console.Write(node.Value + " ");
-            Console.WriteLine();
-
-            byte[] byteCountsArrayDC_Y = new byte[16];
-            foreach (Node node in nodesDC_Y)
-            {
-                Console.WriteLine("---1-1---" + node.Value);
-                byteCountsArrayDC_Y[node.Code.Length - 1]++;
-            }
-
-            List<string> asd = new List<string>();
-            List<byte> values = new List<byte>();
-
-            foreach (short i in DC_Y)
-                foreach (Node node in nodesDC_Y)
-                    if ((byte)i == (byte)node.Value && !values.Contains((byte)node.Value)) 
-                    {
-                        Console.WriteLine(i + " " + node.Value + " " + node.Code);
-                        asd.Add(node.Code);
-                        values.Add((byte)node.Value);
-                        break;
-                    }
-            Console.WriteLine(String.Join(" ", asd));
-
+            GetByteCounts_DC(DC_Y, HuffmanNodes_LuminanceDC, byteCounts_LuminanceDC);
             
-            /*foreach (KeyValuePair<int, int> kvp in counts)
-            {
-                //textBox3.Text += ("Key = {0}, Value = {1}", kvp.Key, kvp.Value);
-                Console.WriteLine("Key = {0}, Value = {1}", kvp.Key, kvp.Value);
-            }*/
 
-            
-            
+            List<string> DHTCodes_LuminanceDC = new List<string>();
+            List<byte> DHTValues_LuminanceDC = new List<byte>();
+
+            GetCodesAndValues(DC_Y, HuffmanNodes_LuminanceDC, 
+                DHTCodes_LuminanceDC, DHTValues_LuminanceDC);
+
 
             /* ============== Writing to a file =============== */
             if (true)
                 JPGFileWrite.WriteToFile(
                     qTableY: luminanceQuantisationMatrix,
                     qTableC: chrominanceQuantisationMatrix,
-                    height: (short)height,
-                    width: (short)width,
-                    byteCountsDC_Y: byteCountsArrayDC_Y,
-                    tableValuesDC_Y: values,
-                    asd: asd
+                    imageHeight: (short)height,
+                    imageWidth: (short)width,
+                    byteCounts_LuminanceDC: byteCounts_LuminanceDC,
+                    tableValues_LuminanceDC: DHTValues_LuminanceDC,
+                    HuffmanCodes_LuminanceDC: DHTCodes_LuminanceDC
                     );
         }
 
@@ -522,14 +482,16 @@ namespace jpeg
                     numbers[i++] = input[y, x];
                 }
             return numbers;
-            //Console.WriteLine(String.Join(", ", numbers));
         }
         static byte[] PrepareDC(short[] input)
         {
             byte[] DC = new byte[input.Length];
+
             DC[0] = (byte)input[0];
+
             for(int i = 1; i < input.Length; i++)
                 DC[i] = (byte)(input[i] - input[i-1]);
+
             return DC;
         }
         static int[] RunLengthEncoding(short[] input)
@@ -551,6 +513,23 @@ namespace jpeg
 
             return encoded.ToArray();
         }
+        static void GetByteCounts_DC(List<short> DC, List<Node> HuffmanNodes, byte[] byteCounts)
+        {
+            Dictionary<int, int> byteCountDict = new Dictionary<int, int>();
+            for (int i = 0; i < DC.Count; i++)
+            {
+                int num = DC[i];
+                if (byteCountDict.ContainsKey(num))
+                    byteCountDict[num]++;
+                else         
+                    byteCountDict.Add(num, 1);
+            }
+
+            HuffmanNodes = GetHuffmanList(byteCountDict);
+
+            foreach (Node node in HuffmanNodes)
+                byteCounts[node.Code.Length - 1]++;
+        }
         static List<Node> GetHuffmanList(Dictionary<int, int> input)
         {
             List<Node> treeList = new List<Node>();
@@ -569,6 +548,18 @@ namespace jpeg
             List<Node> nodes = treeList[0].GetNodeList();
 
             return nodes;
+        }
+        static void GetCodesAndValues(List<short> DC, List<Node> HuffmanNodes,
+            List<string> Codes, List<byte> Values)
+        {
+            foreach (short i in DC)
+                foreach (Node node in HuffmanNodes)
+                    if ((byte)i == (byte)node.Value && !Values.Contains((byte)node.Value))
+                    {
+                        Codes.Add(node.Code);
+                        Values.Add((byte)node.Value);
+                        break;
+                    }
         }
     }
 }

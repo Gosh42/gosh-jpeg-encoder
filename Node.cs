@@ -33,10 +33,7 @@ namespace jpeg
         public void WriteCodes(string code = "")
         {
             if (Left == null && Right == null)
-            {
                 Code = code;
-                Console.WriteLine($"{Value} - {Code}\t{Amount}");
-            }
             else
             {
                 if (Left != null)
