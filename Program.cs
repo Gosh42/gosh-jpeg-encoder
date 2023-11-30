@@ -1,4 +1,7 @@
-﻿using System.Drawing;
+﻿using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
+using System.Drawing;
+using System.Dynamic;
 
 namespace jpeg
 {
@@ -41,9 +44,9 @@ namespace jpeg
             /* =============== and Quantisation =============== */
 
             byte quality = 50;
-            short[,] luminanceQuantisationMatrix = GenerateQuantisationMatrix(quality, false);
-            short[,] chrominanceQuantisationMatrix = GenerateQuantisationMatrix(quality, true);
-
+            byte[,] luminanceQuantisationMatrix = GenerateQuantisationMatrix(quality, false);
+            byte[,] chrominanceQuantisationMatrix = GenerateQuantisationMatrix(quality, true);
+            
             short[,] quantisedY = DiscreteCosineTransform(height, width, Y);
             short[,] quantisedCb = DiscreteCosineTransform(halfHeight, halfWidth, dsCb);
             short[,] quantisedCr = DiscreteCosineTransform(halfHeight, halfWidth, dsCr);
@@ -54,9 +57,9 @@ namespace jpeg
             Quantise(quantisedCb, chrominanceQuantisationMatrix);
             Quantise(quantisedCr, chrominanceQuantisationMatrix);
 
-            PrintMatrix(quantisedCb);
+            //PrintMatrix(quantisedCb);
 
-            short[,] test =
+            /*short[,] test =
             {
                 { 0,  1,  5,  6, 14, 15, 27, 28},
                 { 2,  4,  7, 13, 16, 26, 29, 42},
@@ -66,12 +69,109 @@ namespace jpeg
                 {20, 22, 33, 38, 46, 51, 55, 60},
                 {21, 34, 37, 47, 50, 56, 59, 61},
                 {35, 36, 48, 49, 57, 58, 62, 63}
-            };
+            };*/
 
             //PrintMatrix(test);
-            Zigzag(quantisedCb);
 
-            //run length and huffman encoding
+
+            /* ==================== Zigzag ==================== */
+            short[] zigzagY = Zigzag(quantisedY);
+            List<short> DC_Y = new List<short>();
+            List<short> AC_Y = new List<short>();
+            for (int i = 0; i < zigzagY.Length; i++)
+            {
+                if (i % 64 == 0)
+                    DC_Y.Add(zigzagY[i]);
+                else
+                    AC_Y.Add(zigzagY[i]);
+            }
+            short[] zigzagCb = Zigzag(quantisedCb);
+            List<short> DC_Cb = new List<short>();
+            List<short> AC_Cb = new List<short>();
+            for (int i = 0; i < zigzagCb.Length; i++)
+            {
+                if (i % 64 == 0)
+                    DC_Cb.Add(zigzagY[i]);
+                else
+                    AC_Cb.Add(zigzagY[i]);
+            }
+            short[] zigzagCr = Zigzag(quantisedCr);
+            List<short> DC_Cr = new List<short>();
+            List<short> AC_Cr = new List<short>();
+            for (int i = 0; i < zigzagCr.Length; i++)
+            {
+                if (i % 64 == 0)
+                    DC_Cr.Add(zigzagY[i]);
+                else
+                    AC_Cr.Add(zigzagY[i]);
+            }
+
+            /* ============= Run Length Encoding ============== */
+            short[] rleTest = { 1, 2, 0, 4, 0, 0, 0, 10, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 5, 10, 0, 0, 0, 0 };
+            int[] rle = RunLengthEncoding(zigzagCb);
+            //Console.WriteLine(String.Join(", ", rle));
+            
+
+            /* =============== Huffman Encoding =============== */
+            Dictionary<int, int> byteCountsDC_Y = new Dictionary<int, int>();
+            for (int i = 0; i < DC_Y.Count; i++)
+            {
+                int num = DC_Y[i];
+                //if (num == 0) continue;
+                if (byteCountsDC_Y.ContainsKey(num))
+                    byteCountsDC_Y[num]++;
+                else
+                    byteCountsDC_Y.Add(num, 1);
+            }
+
+            List<Node> nodesDC_Y = GetHuffmanList(byteCountsDC_Y);
+
+            foreach (Node node in nodesDC_Y)
+                Console.Write(node.Value + " ");
+            Console.WriteLine();
+
+            byte[] byteCountsArrayDC_Y = new byte[16];
+            foreach (Node node in nodesDC_Y)
+            {
+                Console.WriteLine("---1-1---" + node.Value);
+                byteCountsArrayDC_Y[node.Code.Length - 1]++;
+            }
+
+            List<string> asd = new List<string>();
+            List<byte> values = new List<byte>();
+
+            foreach (short i in DC_Y)
+                foreach (Node node in nodesDC_Y)
+                    if ((byte)i == (byte)node.Value && !values.Contains((byte)node.Value)) 
+                    {
+                        Console.WriteLine(i + " " + node.Value + " " + node.Code);
+                        asd.Add(node.Code);
+                        values.Add((byte)node.Value);
+                        break;
+                    }
+            Console.WriteLine(String.Join(" ", asd));
+
+            
+            /*foreach (KeyValuePair<int, int> kvp in counts)
+            {
+                //textBox3.Text += ("Key = {0}, Value = {1}", kvp.Key, kvp.Value);
+                Console.WriteLine("Key = {0}, Value = {1}", kvp.Key, kvp.Value);
+            }*/
+
+            
+            
+
+            /* ============== Writing to a file =============== */
+            if (true)
+                JPGFileWrite.WriteToFile(
+                    qTableY: luminanceQuantisationMatrix,
+                    qTableC: chrominanceQuantisationMatrix,
+                    height: (short)height,
+                    width: (short)width,
+                    byteCountsDC_Y: byteCountsArrayDC_Y,
+                    tableValuesDC_Y: values,
+                    asd: asd
+                    );
         }
 
         // Temporary helper functions
@@ -111,6 +211,7 @@ namespace jpeg
             }
             Console.WriteLine();
         }
+
         static void CreateComparisonImage(Bitmap image, byte[,] Y, byte[,] Cb, byte[,] Cr)
         {
             int height = image.Height;
@@ -302,9 +403,9 @@ namespace jpeg
 
             return dct;
         }
-        static short[,] GenerateQuantisationMatrix(byte quality, bool isForChrominance)
+        static byte[,] GenerateQuantisationMatrix(byte quality, bool isForChrominance)
         {
-            short[,] luminanceMatrix =
+            byte[,] luminanceMatrix =
             {
                 {16,    11,    10,    16,    24,    40,    51,    61},
                 {12,    12,    14,    19,    26,    58,    60,    55},
@@ -315,7 +416,7 @@ namespace jpeg
                 {49,    64,    78,    87,   103,   121,   120,   101},
                 {72,    92,    95,    98,   112,   100,   103,    99}
             };
-            short[,] chrominanceMatrix =
+            byte[,] chrominanceMatrix =
             {
                 {17,    18,    24,    47,    99,    99,    99,     99},
                 {18,    21,    26,    66,    99,    99,    99,     99},
@@ -327,7 +428,7 @@ namespace jpeg
                 {99,    99,    99,    99,    99,    99,    99,     99}
             };
 
-            short[,] matrix;
+            byte[,] matrix;
             if (isForChrominance)
                 matrix = chrominanceMatrix;
             else
@@ -345,20 +446,20 @@ namespace jpeg
             for (int y = 0; y < 8; y++)
                 for (int x = 0; x < 8; x++)
                 {
-                    matrix[y, x] = (short)((S * matrix[y, x] + 50) / 100);
+                    matrix[y, x] = (byte)((S * matrix[y, x] + 50) / 100);
                     if (matrix[y, x] == 0)
                         matrix[y, x] = 1;
                 }
 
             return matrix;
         }
-        static void Quantise(short[,] dct, short[,] quantisationMatrix)
+        static void Quantise(short[,] dct, byte[,] quantisationMatrix)
         {
             for (int y = 0; y < dct.GetLength(0); y++)
                 for (int x = 0; x < dct.GetLength(1); x++)
                     dct[y, x] /= quantisationMatrix[y % 8, x % 8];
         }
-        static void Zigzag(short[,] input)
+        static short[] Zigzag(short[,] input)
         {
             int height = input.GetLength(0);
             int width = input.GetLength(1);
@@ -420,8 +521,54 @@ namespace jpeg
                     }
                     numbers[i++] = input[y, x];
                 }
+            return numbers;
+            //Console.WriteLine(String.Join(", ", numbers));
+        }
+        static byte[] PrepareDC(short[] input)
+        {
+            byte[] DC = new byte[input.Length];
+            DC[0] = (byte)input[0];
+            for(int i = 1; i < input.Length; i++)
+                DC[i] = (byte)(input[i] - input[i-1]);
+            return DC;
+        }
+        static int[] RunLengthEncoding(short[] input)
+        {
+            List<int> encoded = new List<int>();
+            int zeroCount = 0;
+            for (int i = 0; i < input.Length; i++)
+            {
+                int number = input[i];
+                if (number == 0 && i < input.Length - 1)
+                    zeroCount++;
+                else
+                {
+                    encoded.Add(zeroCount);
+                    encoded.Add(number);
+                    zeroCount = 0;
+                }
+            }
 
-            Console.WriteLine(String.Join(", ", numbers));
+            return encoded.ToArray();
+        }
+        static List<Node> GetHuffmanList(Dictionary<int, int> input)
+        {
+            List<Node> treeList = new List<Node>();
+            foreach(KeyValuePair<int, int> pair in input)
+                treeList.Add(new Node(pair.Key, pair.Value));
+
+            while (treeList.Count > 1)
+            { 
+                Node newNode = new Node(treeList[0], treeList[1]);
+                treeList.RemoveRange(0, 2);
+                treeList.Add(newNode);
+
+                treeList.Sort();
+            }
+            treeList[0].WriteCodes();
+            List<Node> nodes = treeList[0].GetNodeList();
+
+            return nodes;
         }
     }
 }
