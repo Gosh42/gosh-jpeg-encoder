@@ -42,6 +42,20 @@ namespace jpeg
                     Right.WriteCodes(code + "0");
             }
         }
+
+        public void PrintCodes()
+        {
+            if (Left == null && Right == null)
+                Console.WriteLine($"{Value} - {Code}");
+            else
+            {
+                if (Left != null)
+                    Left.PrintCodes();
+                if (Right != null)
+                    Right.PrintCodes();
+            }
+        }
+
         public void ReadCodes(byte[] counts)
         {
             if (Left == null && Right == null)
@@ -59,6 +73,7 @@ namespace jpeg
             List<Node> list = new List<Node>();
 
             this.GetNodeListRecursion(list);
+            list = list.OrderBy(x => x.Code.Length).ToList();
 
             return list;
         }
