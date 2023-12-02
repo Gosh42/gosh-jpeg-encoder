@@ -108,7 +108,7 @@ namespace jpeg
 
             // Start of Scan
             AddStartOfScanData(data);
-            AddSOSHuffmanData(data, HuffmanCodes_LumDC);
+            AddSOSHuffmanData(data, HuffmanCodes_LumDC, HuffmanCodes_LumAC);
 
             // End of Image
             data.AddRange(EOI);
@@ -220,27 +220,42 @@ namespace jpeg
             data.Add(SuccessiveApproximation);
             
         }
-        static void AddSOSHuffmanData(List<byte> data, List<string> strHuffmanCodes_LumDC)
+        static void AddSOSHuffmanData(List<byte> data, List<string> strHuffmanCodes_LumDC, List<string> strHuffmanCodes_LumAC)
         {
-            List<byte> HuffmanCodes_LumDC = HuffmanCodeStrings2ByteList_DC(strHuffmanCodes_LumDC);
+            List<byte> HuffmanCodes_LumDC = HuffmanCodeStrings2ByteList(strHuffmanCodes_LumDC, strHuffmanCodes_LumAC);
 
             data.AddRange(HuffmanCodes_LumDC);
         }
 
-        static List<byte> HuffmanCodeStrings2ByteList_DC(List<string> HuffmanCodes_DC)
+        static List<byte> HuffmanCodeStrings2ByteList(List<string> HuffmanCodes_DC, List<string> HuffmanCodes_AC)
         {
-            string str = "";
-            foreach (string s in HuffmanCodes_DC)
-                str += "0000" + Convert.ToString(s.Length & 0x0F, 2).PadLeft(4, '0') + s;
+            Console.WriteLine(HuffmanCodes_DC.Count + " || " + string.Join(" ", HuffmanCodes_DC));
+            Console.WriteLine(HuffmanCodes_AC.Count + " || " + string.Join(" ", HuffmanCodes_AC));
+            //string str = "";
 
-            str.PadRight(str.Length + (8 - str.Length % 8), '1');
+            //for (int i = 0, d = 0, a = 0; i < HuffmanCodes_DC.Count + HuffmanCodes_AC.Count; i++)
+            //{
+            //    if (i % 63 == 0)
+            //    {
+            //        string codeDC = HuffmanCodes_DC[d++];
+            //        str += "0000" + Convert.ToString(codeDC.Length & 0x0F, 2).PadLeft(4, '0') + codeDC;
+            //        //if(i > 0)
+            //    } else
+            //    {
+            //        byte zero = Zeroes_LumAC[a];
+            //        string codeAC = HuffmanCodes_AC[a++];
+            //        str += Convert.ToString(zero & 0x0F, 2) + Convert.ToString(codeAC.Length & 0x0F, 2) + codeAC;
+            //    }
+            //}
+
+            //str.PadRight(str.Length + (8 - str.Length % 8), '1');
 
             List<byte> codeList = new List<byte>();
 
-            for (int i = 0; i < str.Length / 8; i++)
-            {
-                codeList.Add(Convert.ToByte(str.Substring(8 * i, 8), 2));
-            }
+            //for (int i = 0; i < str.Length / 8; i++)
+            //{
+            //    codeList.Add(Convert.ToByte(str.Substring(8 * i, 8), 2));
+            //}
 
             return codeList;
         }

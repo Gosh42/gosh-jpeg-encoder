@@ -120,7 +120,7 @@ namespace jpeg
             List<string> DHTCodes_LumDC = new List<string>();
             List<byte> DHTValues_LumDC = new List<byte>();
 
-            GetCodesAndValues(DC_Y, HuffmanNodes_LumDC, 
+            GetCodesAndValues_DC(DC_Y, HuffmanNodes_LumDC, 
                 DHTCodes_LumDC, DHTValues_LumDC);
 
 
@@ -136,11 +136,11 @@ namespace jpeg
                 0, 0, 0, 0, 0, 0, 0, 0,
                    0, 1, };
 
-            //Console.WriteLine(rleTest.Count + " | " + String.Join(" ", rleTest));
+            Console.WriteLine(AC_Y.Count + " | " + String.Join(" ", AC_Y));
 
             List<short> rle_LumAC = RunLengthEncoding(AC_Y);
 
-            //Console.WriteLine(rle_LumAC.Count + " | " + String.Join(" ", rle_LumAC));
+            Console.WriteLine(rle_LumAC.Count + " | " + String.Join(" ", rle_LumAC));
 
             List<Node> HuffmanNodes_LumAC = new List<Node>();
             byte[] byteCounts_LumAC = new byte[16];
@@ -150,7 +150,7 @@ namespace jpeg
             List<string> DHTCodes_LumAC = new List<string>();
             List<byte> DHTValues_LumAC = new List<byte>();
 
-            GetCodesAndValues(rle_LumAC, HuffmanNodes_LumAC,
+            GetCodesAndValues_AC(rle_LumAC, HuffmanNodes_LumAC,
                 DHTCodes_LumAC, DHTValues_LumAC);
 
 
@@ -538,7 +538,7 @@ namespace jpeg
                 DC[i] = (short)(input[i] - input[i - 1]);
 
                 if (DC[i] < 0)
-                    DC[i] = (short)(~(-DC[i]));
+                    DC[i] = (byte)(~(-DC[i]));
             }
 
             return DC;
@@ -548,10 +548,19 @@ namespace jpeg
             List<short> encoded = new List<short>();
             short zeroCount = 0;
 
-            for (int i = 0; i < input.Count; i++)
+            if (input[0] == 0)
+                zeroCount = 1;
+            else 
+            {
+                encoded.Add(0);
+                encoded.Add(input[0]);
+            }
+
+            for (int i = 1; i < input.Count; i++)
             {
                 short number = input[i];
-                if (number == 0 && (i % 62 != 0 || i == 0))
+
+                if (number == 0 && (i % 62 != 0))
                     zeroCount++;
                 else
                 {
@@ -559,8 +568,16 @@ namespace jpeg
                     encoded.Add(number);
                     zeroCount = 0;
                 }
-            }
 
+            }
+            int count = 0;
+            for (int i = 0; i < encoded.Count; i++)
+                if ((i & 1) == 0)
+                    count += encoded[i];
+                else
+                    count++;
+
+            Console.WriteLine(input.Count + " | " + count + "!!!!!!!!!!!! | " + encoded.Count);
             return encoded;
         }
 
@@ -585,17 +602,17 @@ namespace jpeg
         static void GetByteCountsAndHuffmanNodes_AC(List<short> AC, ref List<Node> HuffmanNodes, ref byte[] byteCounts)
         {
             Dictionary<int, int> byteCountDict = new Dictionary<int, int>();
-            for (int i = 0; i < AC.Count; i += 1)
+            int count = 0;
+            for (int i = 0; i < AC.Count; i++)
             {
                 int num = AC[i];
 
-                int count = 0;
                 if ((i & 1) == 0)
                 {
                     count += num;
                     continue;
                 }
-                else count += 1;
+                else count++;
 
                 if (num == 0 && count % 63 == 0) continue;
                 if (byteCountDict.ContainsKey(num))
@@ -620,6 +637,10 @@ namespace jpeg
             foreach(KeyValuePair<int, int> pair in input)
                 treeList.Add(new Node(pair.Key, pair.Value));
 
+            string codeIfOne = "";
+            if (treeList.Count == 1)
+                codeIfOne = "00";
+
             while (treeList.Count > 1)
             { 
                 Node newNode = new Node(treeList[0], treeList[1]);
@@ -628,7 +649,7 @@ namespace jpeg
 
                 treeList.Sort();
             }
-            treeList[0].WriteCodes();
+            treeList[0].WriteCodes(codeIfOne);
 
             List<Node> nodes = treeList[0].GetNodeList();
 
@@ -636,19 +657,79 @@ namespace jpeg
 
             return nodes;
         }
-        static void GetCodesAndValues(List<short> DC_AC, List<Node> HuffmanNodes,
+        static void GetCodesAndValues_DC(List<short> DC, List<Node> HuffmanNodes,
             List<string> Codes, List<byte> Values)
         {
-            foreach (short i in DC_AC)
+            foreach (short num in DC)
+            {
+                string str = "";
+                string code = "";
                 foreach (Node node in HuffmanNodes)
                 {
-                    if ((i == (short)node.Value && !Values.Contains((byte)node.Value)))
+                    if (num == (short)node.Value)
                     {
-                        Codes.Add(node.Code);
-                        Values.Add((byte)node.Value);
+                        code = node.Code;
+
+                        if (!Values.Contains((byte)node.Value))
+                            Values.Add((byte)node.Value);
+
                         break;
                     }
                 }
+                str += "0000";
+                str += Convert.ToString(code.Length, 2).PadLeft(4, '0');
+                str += code;
+                Codes.Add(str);
+            }
+        }
+        static void GetCodesAndValues_AC(List<short> AC, List<Node> HuffmanNodes, List<string> Codes, List<byte> Values)
+        {
+            int count = 0;
+            string str = "";
+
+            // 0 1 0 1 0 1 1 3 0 1 0 -1 0 -1 0 2 1 -1 51 0
+            for (int i = 1; i < AC.Count; i += 2)
+            {
+                short zeroes = AC[i - 1];
+                short num = AC[i];
+
+                count += zeroes + 1;
+
+                if (num == 0 && count % 63 == 0)
+                {
+                    str += "00000000";
+                } 
+                else
+                {
+                    string code = "";
+
+                    foreach(Node node in HuffmanNodes)
+                        if(num == (short)node.Value)
+                        {
+                            code = node.Code;
+
+                            if (!Values.Contains((byte)num))
+                            {
+                                Values.Add((byte)num);
+                            }
+                            break;
+                        }
+                    while (zeroes > 15)
+                    {
+                        str += "11110000";
+                        zeroes -= 16;
+                    }
+                    str += Convert.ToString(zeroes, 2).PadLeft(4, '0');
+                    str += Convert.ToString(code.Length, 2).PadLeft(4, '0');
+                    str += code;
+                }
+
+                if (count % 63 == 0)
+                {
+                    Codes.Add(str);
+                    str = "";
+                }
+            }
         }
     }
 }
