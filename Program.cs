@@ -2,6 +2,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
 using System.Dynamic;
+using System.Reflection.Emit;
 
 namespace jpeg
 {
@@ -108,7 +109,9 @@ namespace jpeg
             DC_Y = PrepareDC(DC_Y);
             //Console.WriteLine(DC_Y.Count + " DC | " + String.Join(", ", DC_Y) + "\n");
 
-            List<Node> HuffmanNodes_LumDC = new List<Node>();
+            List<string> DHTCodes_LumDC = HuffmanTableDC(DC_Y, true);
+
+            /*List<Node> HuffmanNodes_LumDC = new List<Node>();
             byte[] byteCounts_LumDC = new byte[16];
 
             GetByteCountsAndHuffmanNodes_DC(DC_Y, ref HuffmanNodes_LumDC, ref byteCounts_LumDC);
@@ -121,7 +124,7 @@ namespace jpeg
             List<byte> DHTValues_LumDC = new List<byte>();
 
             GetCodesAndValues_DC(DC_Y, HuffmanNodes_LumDC, 
-                DHTCodes_LumDC, DHTValues_LumDC);
+                DHTCodes_LumDC, DHTValues_LumDC);*/
 
 
             /* ---------------- AC components ----------------- */
@@ -136,13 +139,15 @@ namespace jpeg
                 0, 0, 0, 0, 0, 0, 0, 0,
                    0, 1, };
 
-            Console.WriteLine(AC_Y.Count + " | " + String.Join(" ", AC_Y));
+            //Console.WriteLine(AC_Y.Count + " | " + String.Join(" ", AC_Y));
 
             List<short> rle_LumAC = RunLengthEncoding(AC_Y);
 
-            Console.WriteLine(rle_LumAC.Count + " | " + String.Join(" ", rle_LumAC));
+            //Console.WriteLine(rle_LumAC.Count + " | " + String.Join(" ", rle_LumAC));
 
-            List<Node> HuffmanNodes_LumAC = new List<Node>();
+            List<string> DHTCodes_LumAC = HuffmanTableAC(rle_LumAC, true);
+
+            /*List<Node> HuffmanNodes_LumAC = new List<Node>();
             byte[] byteCounts_LumAC = new byte[16];
 
             GetByteCountsAndHuffmanNodes_AC(rle_LumAC, ref HuffmanNodes_LumAC, ref byteCounts_LumAC);
@@ -151,7 +156,7 @@ namespace jpeg
             List<byte> DHTValues_LumAC = new List<byte>();
 
             GetCodesAndValues_AC(rle_LumAC, HuffmanNodes_LumAC,
-                DHTCodes_LumAC, DHTValues_LumAC);
+                DHTCodes_LumAC, DHTValues_LumAC);*/
 
 
             /* ============== Writing to a file =============== */
@@ -163,12 +168,12 @@ namespace jpeg
                     imageHeight: (short)height,
                     imageWidth: (short)width,
 
-                    byteCounts_LumDC: byteCounts_LumDC,
-                    tableValues_LumDC: DHTValues_LumDC,
+                    //byteCounts_LumDC: byteCounts_LumDC,
+                    //tableValues_LumDC: DHTValues_LumDC,
                     HuffmanCodes_LumDC: DHTCodes_LumDC,
 
-                    byteCounts_LumAC: byteCounts_LumAC,
-                    tableValues_LumAC: DHTValues_LumAC,
+                    //byteCounts_LumAC: byteCounts_LumAC,
+                    //tableValues_LumAC: DHTValues_LumAC,
                     HuffmanCodes_LumAC: DHTCodes_LumAC
                     );
             }
@@ -375,16 +380,16 @@ namespace jpeg
                     for(int v = 0; v < 8; v++)
                     {
                         if (v == 0)
-                            av = oneDivBySqrt2;
+                            av = 1 / Math.Sqrt(8);
                         else
-                            av = 1;
+                            av = Math.Sqrt(0.25);
 
                         for (int u = 0; u < 8; u++)
                         {
                             if (u == 0)
-                                au = oneDivBySqrt2;
+                                au = 1 / Math.Sqrt(8);
                             else
-                                au = 1;
+                                au = Math.Sqrt(0.25);
 
                             double temp = 0;
                     
@@ -526,6 +531,102 @@ namespace jpeg
             return numbers;
         }
 
+        static List<string> HuffmanTableDC(List<short> components, bool isLuminance)
+        {
+            string[] categoryCodes = { "00", "010", "011", "100", "101", "110", "1110", "11100", "111000", "1110000", "11100000", "111000000" };
+            List<string> codes = new List<string>();
+
+            //Dictionary<byte, byte> codeLengthDict = JpegTableData.GetCodeLengthDict(isLuminance, true);
+
+            foreach (short num in components)
+            {
+                string str = "";
+                int absNum = (byte)Math.Abs(num);
+                byte length = (byte) (Math.Log(absNum, 2) + 1);//codeLengthDict[(byte)absNum];
+
+                str += categoryCodes[length];
+
+                if (num < 0)
+                    absNum = ~absNum;
+
+                //string code = Convert.ToString(absNum, 2).PadLeft(length, num < 0 ? '0' : '1');
+                str += Convert.ToString(absNum, 2)[^length..];
+                
+                codes.Add(str);
+            }
+            return codes;
+        }
+        static List<string> HuffmanTableAC(List<short> rleComponents, bool isLuminance)
+        {
+            List<string> codes = new List<string>();
+
+            string[,] prefixCodes = JpegTableData.GetPrefixACCodes(isLuminance);
+            Dictionary<byte, byte> codeLengthDict = JpegTableData.GetCodeLengthDict(isLuminance, false);
+
+            int count = 0;
+            string str = "";
+
+            // 0 1 0 1 0 1 1 3 0 1 0 -1 0 -1 0 2 1 -1 51 0
+            for (int i = 1; i < rleComponents.Count; i += 2)
+            {
+                byte zeroes = (byte)rleComponents[i - 1];
+                short num = rleComponents[i];
+
+                count += zeroes + 1;
+
+                if (num == 0 && count % 63 < 0)
+                {
+                    str += prefixCodes[0, 0];
+                }
+                else
+                {
+                    int absNum = (byte)Math.Abs(num);
+                    byte length = (byte)(Math.Log(absNum, 2) + 1);//codeLengthDict[(byte)absNum];
+
+                    while (zeroes > 15)
+                    {
+                        str += prefixCodes[15, 0];
+                        zeroes -= 16;
+                    }
+
+                    string prefix = prefixCodes[zeroes, Math.Min(length, (byte)10)];
+
+                    if (num < 0)
+                        absNum = ~absNum;
+
+                    str += prefix;
+                    //string code = Convert.ToString(absNum, 2).PadLeft(length, num < 0 ? '0' : '1');
+                    str += Convert.ToString(absNum, 2)[^length..];
+                }
+
+                if (count % 63 == 0)
+                {
+                    codes.Add(str);
+                    str = "";
+                }
+
+            }
+            return codes;
+
+        }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
         static List<short> PrepareDC(List<short> input)
         {
@@ -536,9 +637,6 @@ namespace jpeg
             for (int i = 1; i < input.Count; i++)
             {
                 DC[i] = (short)(input[i] - input[i - 1]);
-
-                if (DC[i] < 0)
-                    DC[i] = (byte)(~(-DC[i]));
             }
 
             return DC;
@@ -548,28 +646,24 @@ namespace jpeg
             List<short> encoded = new List<short>();
             short zeroCount = 0;
 
-            if (input[0] == 0)
-                zeroCount = 1;
-            else 
+            for (int i = 0; i < input.Count; i += 63)
             {
-                encoded.Add(0);
-                encoded.Add(input[0]);
-            }
-
-            for (int i = 1; i < input.Count; i++)
-            {
-                short number = input[i];
-
-                if (number == 0 && (i % 62 != 0))
-                    zeroCount++;
-                else
+                for (int j = i; j < i + 63; j++)
                 {
-                    encoded.Add(zeroCount);
-                    encoded.Add(number);
-                    zeroCount = 0;
-                }
+                    short number = input[j];
 
+                    if (number == 0 && (j != i + 62))
+                        zeroCount++;
+                    else
+                    {
+                        encoded.Add(zeroCount);
+                        encoded.Add(number);
+                        zeroCount = 0;
+                    }
+                //Console.Write(j + " ");
+                }
             }
+
             int count = 0;
             for (int i = 0; i < encoded.Count; i++)
                 if ((i & 1) == 0)
@@ -676,8 +770,17 @@ namespace jpeg
                         break;
                     }
                 }
-                str += "0000";
-                str += Convert.ToString(code.Length, 2).PadLeft(4, '0');
+                //str += "0000";
+                if (code.Length >= 6) {
+                    for (int i = 0; i < code.Length - 5; i++)
+                        str += '1';
+                    str += '0';
+                            }
+                else
+                {
+                    str += Convert.ToString(code.Length + 1, 2).PadLeft(3, '0');
+                }
+                //str += Convert.ToString(code.Length, 2);//.PadLeft(4, '0');
                 str += code;
                 Codes.Add(str);
             }

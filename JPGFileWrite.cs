@@ -46,7 +46,7 @@ namespace jpeg
 
         // Y
         static byte channelID_Y = 0x01;
-        static byte samplingFactorY = 0x22;
+        static byte samplingFactorY = 0x11;
         static byte quantisationTableID_Y = 0x00;
         // Cb
         static byte channelID_Cb = 0x02;
@@ -66,6 +66,7 @@ namespace jpeg
         //static byte[] DHTCodeAmountDC_Y = new byte[16];
         //static List<byte> DHTCodesDC_Y = new List<byte>();
 
+        
         // тут короче резня, потом допишу
 
 
@@ -87,8 +88,10 @@ namespace jpeg
             byte[,] qTableY, byte[,] qTableC,
             short imageHeight, short imageWidth,
 
-            byte[] byteCounts_LumDC, List<byte> tableValues_LumDC, List<string> HuffmanCodes_LumDC,
-            byte[] byteCounts_LumAC, List<byte> tableValues_LumAC, List<string> HuffmanCodes_LumAC
+            //byte[] byteCounts_LumDC, List<byte> tableValues_LumDC, 
+            List<string> HuffmanCodes_LumDC,
+            //byte[] byteCounts_LumAC, List<byte> tableValues_LumAC, 
+            List<string> HuffmanCodes_LumAC
             )
         {
             List<byte> data = new List<byte>();
@@ -96,15 +99,16 @@ namespace jpeg
             // Заголовок
             AddHeaderData(data);
 
-            // Start of Frame
-            AddStartOfFrameData(data, imageHeight, imageWidth);
-
             // Таблицы квантования
             AddQuantisationTableData(data, qTableY, qTableC);
 
+            // Start of Frame
+            AddStartOfFrameData(data, imageHeight, imageWidth);
+
             // Define Huffman Tables
             AddHuffmanTableDefinitionData(data, DHTInfo_LumDC, DHTInfo_LumAC, 
-                byteCounts_LumDC, tableValues_LumDC, byteCounts_LumAC, tableValues_LumAC);
+                JpegTableData.GetTableLengths(true, true), JpegTableData.GetTableValues(true, true), 
+                JpegTableData.GetTableLengths(true, false), JpegTableData.GetTableValues(true, false));
 
             // Start of Scan
             AddStartOfScanData(data);
@@ -220,11 +224,27 @@ namespace jpeg
             data.Add(SuccessiveApproximation);
             
         }
-        static void AddSOSHuffmanData(List<byte> data, List<string> strHuffmanCodes_LumDC, List<string> strHuffmanCodes_LumAC)
+        static void AddSOSHuffmanData(List<byte> data, List<string> Codes_LumDC, List<string> Codes_LumAC)
         {
-            List<byte> HuffmanCodes_LumDC = HuffmanCodeStrings2ByteList(strHuffmanCodes_LumDC, strHuffmanCodes_LumAC);
+            List<byte> HuffmanCodes = new List<byte>();// = HuffmanCodeStrings2ByteList(strHuffmanCodes_LumDC, strHuffmanCodes_LumAC);
+            Console.WriteLine(
+                Codes_LumDC[0].Length + " " + Codes_LumAC[0].Length + "\n" +
+                Codes_LumDC[1].Length + " " + Codes_LumAC[1].Length);
 
-            data.AddRange(HuffmanCodes_LumDC);
+            string allCodes = "";
+            for (int i = 0; i < Codes_LumDC.Count; i++)
+            {
+                allCodes += Codes_LumDC[i];
+                allCodes += Codes_LumAC[i];
+                //allCodes += "00000000";
+            }
+            if (allCodes.Length % 8 != 0)
+                allCodes.PadRight(allCodes.Length + 8 - (allCodes.Length % 8), '1');
+
+            for (int i = 0; i < allCodes.Length / 8; i++)
+                HuffmanCodes.Add(Convert.ToByte(allCodes.Substring(i * 8, 8), 2));
+
+            data.AddRange(HuffmanCodes);
         }
 
         static List<byte> HuffmanCodeStrings2ByteList(List<string> HuffmanCodes_DC, List<string> HuffmanCodes_AC)
