@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.7.34031.279
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "jpeg", "jpeg.csproj", "{8957ABD7-3A06-40BB-AB60-FD662FB8D4DD}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "anotherJpeg", "anotherJpeg.csproj", "{F6338832-36B1-486C-B0BA-73FAF35C4690}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -11,15 +11,15 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{8957ABD7-3A06-40BB-AB60-FD662FB8D4DD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{8957ABD7-3A06-40BB-AB60-FD662FB8D4DD}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{8957ABD7-3A06-40BB-AB60-FD662FB8D4DD}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{8957ABD7-3A06-40BB-AB60-FD662FB8D4DD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F6338832-36B1-486C-B0BA-73FAF35C4690}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F6338832-36B1-486C-B0BA-73FAF35C4690}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F6338832-36B1-486C-B0BA-73FAF35C4690}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F6338832-36B1-486C-B0BA-73FAF35C4690}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
-		SolutionGuid = {586A33CC-D35D-4A72-8F56-88251EDFE053}
+		SolutionGuid = {EF099448-09A2-4061-877F-33D43CA84C57}
 	EndGlobalSection
 EndGlobal
