@@ -8,12 +8,13 @@ namespace anotherJpeg
 {
     internal class FileWriter
     {
-        public static void Write2File(byte[,] qTableLum, byte[,] qTableChrom, short imageHeight, short imageWidth)
+        public static void Write2File(byte[,] qTableLum, byte[,] qTableChrom, 
+            short imageHeight, short imageWidth, List<EncodedValue> codesLum, 
+            List<EncodedValue> codesCb, List<EncodedValue> codesCr)
         {
             List<byte> data = new List<byte>();
             AddHeaderData(data);
 
-            // Отредактировать для цветности
             AddQuantisationTableData(data, qTableLum, qTableChrom);
             AddStartOfFrameData(data, imageHeight, imageWidth);
 
@@ -23,7 +24,9 @@ namespace anotherJpeg
             // AddHuffmanTableDefinitionData() для цветности
 
             AddStartOfScanData(data);
-            //AddSOSHuffmanData
+            AddSOSEncodedValueData(data, codesLum);
+            AddSOSEncodedValueData(data, codesCb);
+            AddSOSEncodedValueData(data, codesCr);
 
             data.AddRange(EOI); // End of Image
 
@@ -67,8 +70,8 @@ namespace anotherJpeg
             data.AddRange(DQTLength);
             data.Add(qTableInfoLum);
             data.AddRange(qTableArrayLum);
-            //data.Add(quantisationTableInfoС);
-            //data.AddRange(quantisationTableС);
+            data.Add(qTableInfoСhrom);
+            data.AddRange(qTableArrayChrom);
         }
         static void AddStartOfFrameData(List<byte> data, short imageHeight, short imageWidth)
         {
@@ -78,7 +81,7 @@ namespace anotherJpeg
                 frameHeight.Length +
                 frameWidth.Length +
                 1 + // channelAmount
-                3 //9 // channel data
+                9 // channel data
                 );
 
             SOFLength = Short2ByteArray(SOFLengthCalculation);
@@ -92,15 +95,18 @@ namespace anotherJpeg
             data.AddRange(frameHeight);
             data.AddRange(frameWidth);
             data.Add(channelAmount);
+
             data.Add(channelID_Y);
             data.Add(samplingFactorY);
             data.Add(quantisationTableID_Y);
-            /*data.Add(channelID_Cb);
-              data.Add(samplingFactorCb);
-              data.Add(quantisationTableID_Cb);
-              data.Add(channelID_Cr);
-              data.Add(samplingFactorCr);
-              data.Add(quantisationTableID_Cr);*/
+
+            data.Add(channelID_Cb);
+            data.Add(samplingFactorCb);
+            data.Add(quantisationTableID_Cb);
+
+            data.Add(channelID_Cr);
+            data.Add(samplingFactorCr);
+            data.Add(quantisationTableID_Cr);
         }
         static void AddHuffmanTableDefinitionData(List<byte> data, byte infoDC, byte infoAC,
             byte[] byteCounts_DC, List<byte> tableValues_DC, byte[] byteCounts_AC, List<byte> tableValues_AC)
@@ -131,17 +137,41 @@ namespace anotherJpeg
         }
         static void AddStartOfScanData(List<byte> data)
         {
-            short SOSLengthCalculation = (short)(SOSLength.Length + 5);
+            short SOSLengthCalculation = (short)(SOSLength.Length + 1 + 4 + 4 + 4);
 
             SOSLength = Short2ByteArray(SOSLengthCalculation);
 
             data.AddRange(SOS);
             data.AddRange(SOSLength);
+
             data.Add(SOSchannelAmount);
+
             data.Add(SOSChannelID_Y);
             data.Add(StartOfSelection);
             data.Add(EndOfSelection);
             data.Add(SuccessiveApproximation);
+
+            data.Add(SOSChannelID_Y);
+            data.Add(StartOfSelection);
+            data.Add(EndOfSelection);
+            data.Add(SuccessiveApproximation);
+
+            data.Add(SOSChannelID_Y);
+            data.Add(StartOfSelection);
+            data.Add(EndOfSelection);
+            data.Add(SuccessiveApproximation);
+        }
+        static void AddSOSEncodedValueData(List<byte> data, List<EncodedValue> codes)
+        {
+            string str = "";
+            foreach (EncodedValue code in codes)
+            {
+                str += code.PrefixBitString + /*(code.Value > 0 ? '0' : '1') +*/ code.ValueBitString;
+            }
+            if (str.Length % 8 != 0) str.PadRight(str.Length + 8 - (str.Length % 8), '1');
+
+            for (int i = 0; i < str.Length / 8; i++)
+                data.Add(Convert.ToByte(str.Substring(i * 8, 8), 2));
         }
     }
 }

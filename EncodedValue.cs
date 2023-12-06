@@ -13,7 +13,7 @@ namespace anotherJpeg
         public short Value { get; set; } // значение
         public string? PrefixBitString {  get; set; }
         public string? ValueBitString { get; set; }
-
+        
         public EncodedValue(short runLength, byte size, short value)
         {
             RunLength = runLength;

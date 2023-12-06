@@ -44,11 +44,18 @@ namespace anotherJpeg
             /* ================ Run Length and ================ */
             /* =============== Huffman Encoding =============== */
             List<EncodedValue> lum = RunLengthEncoding(zigzagY);
+            SetBits(lum, true);
+            List<EncodedValue> chromBlue = RunLengthEncoding(zigzagCb);
+            SetBits(chromBlue, true);
+            List<EncodedValue> chromRed = RunLengthEncoding(zigzagCr);
+            SetBits(chromRed, true);
 
             foreach (EncodedValue v in lum)
             {
-                Console.WriteLine(v.RunLength + "\t" + v.Size + "\t" + v.Value);
+                Console.WriteLine(v.RunLength + "\t" + v.Size + "\t" + v.Value + "\t" + v.PrefixBitString + "\t" + v.ValueBitString);
             }
+
+            FileWriter.Write2File(qTableLum, qTableChrom, (short)height, (short)width, lum, chromBlue, chromRed);
         }
     }
 }

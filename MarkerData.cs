@@ -19,7 +19,7 @@
 
         /* ============= Quantisation Tables ============== */
         public static readonly byte[] DQT = { 0xFF, 0xDB }; // Define Quantisation Tables
-        public static readonly byte[] DQTLength = { 0x00, 2 + 1 + 64/*+1+64*/ };
+        public static readonly byte[] DQTLength = { 0x00, 2 + 1 + 64 + 1 + 64 };
         public static readonly byte qTableInfoLum = 0x00; // 8 бит, ID = 0
         // 64 байт - матрица квантования для яркости
         public static readonly byte qTableInfoСhrom = 0x01; // 8 бит, ID = 1
@@ -35,11 +35,11 @@
         public static byte precision = 0x08; // Бит на цветовой канал - всегда 8
         public static byte[] frameHeight = new byte[2];
         public static byte[] frameWidth = new byte[2];
-        public static byte channelAmount = 0x01;//3; // 3 - для YCbCr
+        public static byte channelAmount = 0x03; // 3 - для YCbCr
 
         // Y
         public static byte channelID_Y = 0x01;
-        public static byte samplingFactorY = 0x11;
+        public static byte samplingFactorY = 0x22;
         public static byte quantisationTableID_Y = 0x00;
         // Cb
         public static byte channelID_Cb = 0x02;
@@ -66,12 +66,12 @@
         /* ================ Start of Scan ================= */
         public static byte[] SOS = { 0xFF, 0xDA }; // Start of Scan
         public static byte[] SOSLength = new byte[2];
-        public static byte SOSchannelAmount = 0x01; // кол-во компонентов
+        public static byte SOSchannelAmount = 0x03; // кол-во компонентов
         
         public static readonly byte SOSChannelID_Y = 0x00;
         
-        public static readonly byte EndOfSelection = 0x3F;
         public static readonly byte StartOfSelection = 0x00;
+        public static readonly byte EndOfSelection = 0x3F;
         public static readonly byte SuccessiveApproximation = 0x00;
         
         public static readonly byte[] EOI = { 0xFF, 0xD9 }; // End of Image

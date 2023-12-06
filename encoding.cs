@@ -222,7 +222,7 @@ namespace anotherJpeg
                 for (int i = offset; i < offset + 64; i++)
                     if (input[i] != 0) 
                         lastNonZeroIndex = i;
-                Console.WriteLine(lastNonZeroIndex);
+
                 byte runLength = 0;
 
                 for (int i = offset; i < offset + 64; i++)
@@ -241,7 +241,10 @@ namespace anotherJpeg
                     else // AC
                     {
                         if (i > lastNonZeroIndex)
+                        {
                             output.Add(new EncodedValue(0, 0, 0));
+                            break;
+                        }
                         else if (num == 0 && runLength < 15)
                             runLength++;
                         else
@@ -255,6 +258,42 @@ namespace anotherJpeg
             }
 
             return output;
+        }
+        public static void SetBits(List<EncodedValue> input, bool isLuminance)
+        {
+            string[] categoryCodesDC = new string[0];
+            string[,] prefixCodesAC = new string[0,0];
+            if (isLuminance)
+            {
+                categoryCodesDC = TableData.categoryCodes_LumDC;
+                prefixCodesAC = TableData.prefixCodes_LumAC;
+            }/*
+            else
+            {
+                categoryCodesDC = TableData.categoryCodes_ChromDC;
+                prefixCodesAC = TableData.prefixCodes_ChromAC;
+            }*/
+            foreach (EncodedValue code in input)
+            {
+                short value = code.Value;
+
+                if (value < 0)
+                    value = (short)~(-value);
+
+                string valueBitStr = Convert.ToString(value, 2)[^code.Size..];
+
+                if (code.RunLength == -1)
+                {
+                    code.PrefixBitString = categoryCodesDC[code.Size];
+                    code.ValueBitString = valueBitStr;
+                } 
+                else
+                {
+                    code.PrefixBitString = prefixCodesAC[code.RunLength, code.Size];
+                    code.ValueBitString = valueBitStr;
+                }
+
+            }
         }
     }
 }
